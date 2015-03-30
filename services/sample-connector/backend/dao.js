@@ -23,7 +23,7 @@ function DataAccessObject() {
 
 module.exports = DataAccessObject;
 
-DataAccessObject.prototype.fetchUnprocessedItems = function(assignedOwnerID) {
+DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -32,13 +32,16 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(assignedOwnerID) {
             throwError("Can't query, invalid client");
         }
 
-        // make the query
+        // make the query - find all workqueue items owned by the ownerID
+        // whose modification time is greater than the
+        // modification time of the lasted processed item of the owner
         dbClient
         .query(
             "select workqueue.modtime, payload " +
-            "from workqueue join owners on (workqueue.ownerid = owners.ownerid) " +
-            "where owners.ownerid = " + assignedOwnerID + " " +
-                   "and workqueue.modtime > owners.modtime"
+              "from workqueue join owners on (workqueue.ownerid = owners.ownerid) " +
+             "where workqueue.ownerid = " + ownerID + " " +
+               "and workqueue.modtime > owners.modtime " +
+             "order by workqueue.modtime"
         )
 
         // process the fetched work items
@@ -72,9 +75,11 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(assignedOwnerID) {
     return deferred.promise;
 };
 
-DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, lockTime) {
+DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, lockTime, lockExpirationMS) {
     var deferred = q.defer();
     var db = jive.service.persistence();
+
+    lockExpirationMS = lockExpirationMS || 60 * 1000;
 
     db.getQueryClient().then( function(dbClient) {
         if ( !dbClient ) {
@@ -85,11 +90,10 @@ DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, l
         var now = new Date().getTime();
         dbClient.query(
             "update owners " +
-                "set workerid = " + consumerID + ", " +
-                "takentime = " + lockTime + " " +
-                "where " +
-                "ownerid = " + assignedOwnerID + " " +
-                "and (takentime is NULL or (" + now + " - takenTime > 10000) )"
+               "set workerid = " + consumerID + ", " +
+                   "takentime = " + lockTime + " " +
+             "where ownerid = " + assignedOwnerID + " " +
+               "and (takentime is NULL or (" + now + " - takenTime > " + lockExpirationMS + ") )"
         )
 
         // evaluate the result of the attempted lock
@@ -102,6 +106,7 @@ DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, l
 
             // failure
             function(e) {
+                // log at debug, because update-based lock failures are legit
                 jive.logger.debug(e.stack);
                 deferred.resolve(false);
             }
@@ -174,7 +179,7 @@ DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime)
     return deferred.promise;
 };
 
-DataAccessObject.prototype.releaseLock = function(assignedOwnerID, consumerID, maxModificationTime) {
+DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -186,12 +191,10 @@ DataAccessObject.prototype.releaseLock = function(assignedOwnerID, consumerID, m
         // make the query
         dbClient.query(
             "update owners " +
-                "set workerid = NULL, " +
-                "modtime = " + (maxModificationTime ? maxModificationTime : "modtime") + ", " +
-                "takentime = NULL " +
-                "where " +
-                "ownerid = " + assignedOwnerID + " " +
-                "and workerid = " + consumerID
+               "set workerid = NULL, " +
+                    "takentime = NULL " +
+             "where ownerid = " + ownerID + " " +
+               "and workerid = " + consumerID
         )
 
         // evaluate the result of the attempt to release the lock
@@ -201,7 +204,58 @@ DataAccessObject.prototype.releaseLock = function(assignedOwnerID, consumerID, m
                 var r = dbClient.results();
 
                 if (r.rowCount < 1 ) {
-                    jive.logger.warn("consumer " + consumerID + " and ownerID " + assignedOwnerID + " was already unlocked.");
+                    jive.logger.warn("workerid " + consumerID + " and ownerID " + ownerID + " was already unlocked.");
+                }
+                deferred.resolve(true);
+            },
+
+            // failure
+            function(e) {
+                jive.logger.debug(e.stack);
+                deferred.resolve(false);
+            }
+        )
+
+        // always try to release the client, if it exists
+        .finally(function() {
+            if ( dbClient ) {
+                // always try to release the client, if it exists
+                dbClient.release();
+            }
+        });
+    });
+
+    return deferred.promise;
+};
+
+DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificationTime) {
+    var deferred = q.defer();
+    var db = jive.service.persistence();
+
+    db.getQueryClient().then( function(dbClient) {
+        if ( !dbClient ) {
+            throwError("Can't query, invalid client");
+        }
+
+        var now = new Date().getTime();
+
+        // make the query
+        dbClient.query(
+            "update owners " +
+               "set modtime = " + modificationTime + ", " +
+                   "takentime = " + now + " " +
+             "where ownerid = " + ownerID + " " +
+               "and workerid = " + consumerID
+        )
+
+        // evaluate the result of the attempt to update modification time
+        .then(
+            // success
+            function() {
+                var r = dbClient.results();
+
+                if (r.rowCount < 1 ) {
+                    jive.logger.warn("!!!! ownerID " + ownerID + " failed to have its modtime updated !!!!");
                 }
                 deferred.resolve(true);
             },

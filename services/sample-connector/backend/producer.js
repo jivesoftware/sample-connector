@@ -49,7 +49,7 @@ Producer.prototype.launch = function() {
     };
 
     // schedule
-    var producer_rate = process.env.__PRODUCER_RATE || 10;
+    var producer_rate = process.env.__PRODUCER_RATE || 250;
     var id = jive.util.guid();
     var task = jive.tasks.build(produceWorkItem, producer_rate, id);
     jive.tasks.schedule( task, jive.service.scheduler());
