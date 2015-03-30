@@ -21,6 +21,10 @@ var DataAccessObject = require('./dao');
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Public API
 
+/**
+ * This entity is responsible for populating the workqueue table with items to be processed by consumers.
+ * @constructor
+ */
 function Producer() {
     jive.logger.info("******************************");
     jive.logger.info("* producer *");

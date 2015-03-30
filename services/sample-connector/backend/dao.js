@@ -130,7 +130,8 @@ DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime)
 
         // make the query
         dbClient.query(
-            "insert into activitylog values (" + workerid + ", " + ownerid + ", " + modtime + ")"
+            "insert into activitylog (workerid, ownerid, modtime) " +
+                "values (" + workerid + ", " + ownerid + ", " + modtime + ")"
         )
 
         // evaluate the results of inserting the activity log

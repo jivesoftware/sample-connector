@@ -21,10 +21,16 @@ var DataAccessObject = require('./dao');
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Public API
 
-function Consumer() {
-    var consumerID = process.env.__CONSUMER_ID;
+/**
+ * This entity consumes items from the workqueue table.
+ * @constructor
+ */
+function Consumer(consumerID) {
     if ( !consumerID ) {
-        consumerID = new Date().getTime();
+        consumerID = process.env.__CONSUMER_ID;
+        if ( !consumerID ) {
+            consumerID = new Date().getTime();
+        }
     }
 
     jive.logger.info("******************************");
@@ -61,7 +67,9 @@ function performWorkItem(consumerID, ownerID, workItem) {
     var self = this;
 
     setTimeout( function() {
-        self.dao.insertActivity(self.consumerID, ownerID, workItem['modtime']).then( function() {
+        // log the activity, so we can make sure that no single work entry
+        // was handled by the same consumer (eg. processed twice)
+        self.dao.insertActivity(consumerID, ownerID, workItem['modtime']).then( function() {
             jive.logger.info(">> consumer " + consumerID
                 + " processed payload id/modtime " + workItem['modtime']
                 + " with payload " + workItem['payload']
@@ -87,13 +95,13 @@ function processLock(ownerID) {
     var self = this;
     var deferred = q.defer();
 
-    // get the modificationTime to help search for processable work items
     self.dao
+        // fetch processable work items
         .fetchUnprocessedItems(ownerID )
-        .then( function(items) {
-            // process the fetched work items
-            var maxModificationTime;
 
+        // process the fetched work items
+        .then( function(items) {
+            var maxModificationTime;
             var promises = [];
 
             for ( var i = 0; i < items.length; i++ ) {
@@ -105,8 +113,6 @@ function processLock(ownerID) {
                     maxModificationTime = workItem['modtime'] > maxModificationTime ?
                         workItem['modtime'] : maxModificationTime ;
 
-                    // log the activity, so we can make sure that no single work entry
-                    // was handled by the same consumer (eg. processed twice)
                     return performWorkItem.call(self, self.consumerID, ownerID, workItem);
                 };
                 promises.push(promise());
