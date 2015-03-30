@@ -61,56 +61,6 @@ Consumer.prototype.launch = function() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private
 
-function pause(ms) {
-    var deferred = q.defer();
-    setTimeout( function() {
-        deferred.resolve();
-    }, ms);
-    return deferred.promise;
-}
-
-function qParallel(funcs, count) {
-    var length = funcs.length;
-    if (!length) {
-        return q([]);
-    }
-
-    if (count == null) {
-        count = Infinity;
-    }
-
-    count = Math.max(count, 1);
-    count = Math.min(count, funcs.length);
-
-    var promises = [];
-    var values = [];
-    for (var i = 0; i < count; ++i) {
-        var promise = funcs[i]();
-        promise = promise.then(next(i));
-        promises.push(promise);
-    }
-
-    return q.all(promises).then(function () {
-        return values;
-    });
-
-    function next(i) {
-        return function (value) {
-            if (i == null) {
-                i = count++;
-            }
-
-            if (i < length) {
-                values[i] = value;
-            }
-
-            if (count < length) {
-                return funcs[count]().then(next())
-            }
-        }
-    }
-}
-
 function performWorkItem(consumerID, ownerID, workItem) {
     var workItemDuration = 100 + getRandomInt(0, 300);
     var deferred = q.defer();
@@ -182,7 +132,7 @@ function processLock(ownerID) {
                 promises.push( createPromise(workItem) );
             }
 
-            qParallel(promises, 1)
+            qSerial(promises)
             .then(
                 function(){
                     deferred.resolve();
@@ -271,9 +221,86 @@ function releaseLock(assignedOwnerID) {
     return deferred.promise;
 }
 
+/**
+ * Returns a random number between min and max (both inclusive).
+ * @param min
+ * @param max
+ * @returns {*}
+ */
 function getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+/**
+ * Pauses for 'ms' number of millseconds before resolving the returned promise.
+ * @param ms
+ * @returns {promise|Q.promise}
+ */
+function pause(ms) {
+    var deferred = q.defer();
+    setTimeout( function() {
+        deferred.resolve();
+    }, ms);
+    return deferred.promise;
+}
+
+/**
+ * Runs promise producing functions in serial.
+ * @param funcs
+ * @returns {*}
+ */
+function qSerial(funcs) {
+    return qParallel(funcs, 1);
+}
+
+/**
+ * Runs at most 'count' number of promise producing functions in parallel.
+ * @param funcs
+ * @param count
+ * @returns {*}
+ */
+function qParallel(funcs, count) {
+    var length = funcs.length;
+    if (!length) {
+        return q([]);
+    }
+
+    if (count == null) {
+        count = Infinity;
+    }
+
+    count = Math.max(count, 1);
+    count = Math.min(count, funcs.length);
+
+    var promises = [];
+    var values = [];
+    for (var i = 0; i < count; ++i) {
+        var promise = funcs[i]();
+        promise = promise.then(next(i));
+        promises.push(promise);
+    }
+
+    return q.all(promises).then(function () {
+        return values;
+    });
+
+    function next(i) {
+        return function (value) {
+            if (i == null) {
+                i = count++;
+            }
+
+            if (i < length) {
+                values[i] = value;
+            }
+
+            if (count < length) {
+                return funcs[count]().then(next())
+            }
+        }
+    }
+}
+
 
 
 
