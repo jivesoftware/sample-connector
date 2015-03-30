@@ -23,6 +23,13 @@ function DataAccessObject() {
 
 module.exports = DataAccessObject;
 
+/**
+ * find all workqueue items owned by the ownerID
+ * whose modification time is greater than the
+ * modification time of the lasted processed item of the owner
+ * @param ownerID
+ * @returns {promise|Q.promise}
+ */
 DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
     var deferred = q.defer();
     var db = jive.service.persistence();
@@ -32,9 +39,7 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
             throwError("Can't query, invalid client");
         }
 
-        // make the query - find all workqueue items owned by the ownerID
-        // whose modification time is greater than the
-        // modification time of the lasted processed item of the owner
+        // make the query
         dbClient
         .query(
             "select workqueue.modtime, payload " +
@@ -58,7 +63,6 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
                 }
             }
 
-            // when done processing return the maximum modification time
             return deferred.resolve(workItems);
         })
 
@@ -75,6 +79,15 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
     return deferred.promise;
 };
 
+/**
+ * Attempt to update the lock table, setting the takentime and workerid, for a particular owner
+ * whose takentime is empty or is expired (using the optionally passed in lockExpirationMS)
+ * @param consumerID
+ * @param assignedOwnerID
+ * @param lockTime
+ * @param lockExpirationMS
+ * @returns {promise|Q.promise}
+ */
 DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, lockTime, lockExpirationMS) {
     var deferred = q.defer();
     var db = jive.service.persistence();
@@ -124,6 +137,14 @@ DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, l
     return deferred.promise;
 };
 
+/**
+ * Records an activity log for the given workitem (identified by the modtime and ownerid) for the worker
+ * which processed it.
+ * @param workerid
+ * @param ownerid
+ * @param modtime
+ * @returns {promise|Q.promise}
+ */
 DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime) {
     var deferred = q.defer();
     var db = jive.service.persistence();
@@ -179,6 +200,12 @@ DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime)
     return deferred.promise;
 };
 
+/**
+ * Releases the lock table for the given owner and worker.
+ * @param ownerID
+ * @param consumerID
+ * @returns {promise|Q.promise}
+ */
 DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
     var deferred = q.defer();
     var db = jive.service.persistence();
@@ -228,6 +255,14 @@ DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
     return deferred.promise;
 };
 
+/**
+ * Renews the lock lease to the given worker and its target owner, and updates
+ * the owner's record of the most recently processed work entry's modtime.
+ * @param ownerID
+ * @param consumerID
+ * @param modificationTime
+ * @returns {promise|Q.promise}
+ */
 DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificationTime) {
     var deferred = q.defer();
     var db = jive.service.persistence();
@@ -279,6 +314,14 @@ DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificati
     return deferred.promise;
 };
 
+/**
+ * Adds a new work item for the given owner. The modificationTime is essentially the unique identifier of the
+ * work item.
+ * @param ownerID
+ * @param payload
+ * @param modificationTime
+ * @returns {promise|Q.promise}
+ */
 DataAccessObject.prototype.addWork = function(ownerID, payload, modificationTime) {
     var deferred = q.defer();
     var db = jive.service.persistence();
@@ -310,6 +353,10 @@ DataAccessObject.prototype.addWork = function(ownerID, payload, modificationTime
     return deferred.promise;
 };
 
+/**
+ * Builds up the schema and required seed data to run the system.
+ * @returns {*}
+ */
 DataAccessObject.prototype.setupSchema = function() {
     var db = jive.service.persistence();
 

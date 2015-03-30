@@ -48,6 +48,7 @@ Consumer.prototype.launch = function() {
 
     // schedule
     var consumer_lock_rate = process.env._CONSUMER_LOCK_RATE || 1000;
+    self.workItemDuration = process.env._CONSUMER_WORK_ITEM_DURATION;
     var id = jive.util.guid();
 
     var task = jive.tasks.build(
@@ -62,9 +63,9 @@ Consumer.prototype.launch = function() {
 // Private
 
 function performWorkItem(consumerID, ownerID, workItem) {
-    var workItemDuration = 100 + getRandomInt(0, 300);
-    var deferred = q.defer();
     var self = this;
+    var deferred = q.defer();
+    var workItemDuration = self.workItemDuration || 500 + getRandomInt(0, 300);
 
     // ..........................................................
     // .... pretend to do some work that takes a bit of time ....
