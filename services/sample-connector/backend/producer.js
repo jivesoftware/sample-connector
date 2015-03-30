@@ -22,7 +22,7 @@ var DataAccessObject = require('./dao');
 // Public API
 
 /**
- * This entity is responsible for populating the workqueue table with items to be processed by consumers.
+ * This entity is responsible for populating the workitems table with items to be processed by workers.
  * @constructor
  */
 function Producer() {
@@ -39,12 +39,12 @@ Producer.prototype.launch = function() {
     var self = this;
 
     var produceWorkItem = function () {
-        var ownerID = getRandomInt(1, 5);
+        var workOwnerID = getRandomInt(1, 5);
         var payload = jive.util.guid();
         var modificationTime = new Date().getTime();
 
-        self.dao.addWork(ownerID, payload, modificationTime).then(function() {
-            jive.logger.info("Inserted ownerID " + ownerID + ", payload " + payload);
+        self.dao.addWork(workOwnerID, payload, modificationTime).then(function() {
+            jive.logger.info("Inserted workOwnerID " + workOwnerID + ", payload " + payload);
         });
     };
 

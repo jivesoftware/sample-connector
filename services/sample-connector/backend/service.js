@@ -18,11 +18,11 @@ var jive = require('jive-sdk');
 var q = require('q');
 var DataAccessObject = require('./dao');
 var Producer = require('./producer');
-var Consumer = require('./consumer');
+var Worker = require('./worker');
 
 exports.onBootstrap = function(app) {
     jive.logger.info("****************************************");
-    jive.logger.info("Sample distributed workqueue processing");
+    jive.logger.info("Sample distributed work item processing");
     jive.logger.info("****************************************");
 
     var error;
@@ -42,9 +42,9 @@ exports.onBootstrap = function(app) {
             producer.launch();
         }
 
-        if ( role === 'consumer' ) {
-            var consumer = new Consumer();
-            consumer.launch();
+        if ( role === 'worker' ) {
+            var worker = new Worker();
+            worker.launch();
         }
     })
     .catch(function(e) {

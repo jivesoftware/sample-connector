@@ -24,13 +24,13 @@ function DataAccessObject() {
 module.exports = DataAccessObject;
 
 /**
- * find all workqueue items owned by the ownerID
+ * find all work items owned by the workOwnerID
  * whose modification time is greater than the
- * modification time of the lasted processed item of the owner
- * @param ownerID
+ * modification time of the lasted processed item of the workowner
+ * @param workOwnerID
  * @returns {promise|Q.promise}
  */
-DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
+DataAccessObject.prototype.fetchUnprocessedItems = function(workOwnerID) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -42,11 +42,11 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
         // make the query
         dbClient
         .query(
-            "select workqueue.modtime, payload " +
-              "from workqueue join owners on (workqueue.ownerid = owners.ownerid) " +
-             "where workqueue.ownerid = " + ownerID + " " +
-               "and workqueue.modtime > owners.modtime " +
-             "order by workqueue.modtime"
+            "select workitems.modtime, payload " +
+              "from workitems join workowners on (workitems.workownerid = workowners.workownerid) " +
+             "where workitems.workownerid = " + workOwnerID + " " +
+               "and workitems.modtime > workowners.modtime " +
+             "order by workitems.modtime"
         )
 
         // process the fetched work items
@@ -80,15 +80,15 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(ownerID) {
 };
 
 /**
- * Attempt to update the lock table, setting the takentime and workerid, for a particular owner
+ * Attempt to update the lock table, setting the takentime and workerid, for a particular workowner
  * whose takentime is empty or is expired (using the optionally passed in lockExpirationMS)
- * @param consumerID
+ * @param workerID
  * @param assignedOwnerID
  * @param lockTime
  * @param lockExpirationMS
  * @returns {promise|Q.promise}
  */
-DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, lockTime, lockExpirationMS) {
+DataAccessObject.prototype.captureLock = function(workerID, assignedOwnerID, lockTime, lockExpirationMS) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -102,10 +102,10 @@ DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, l
         // make the query
         var now = new Date().getTime();
         dbClient.query(
-            "update owners " +
-               "set workerid = " + consumerID + ", " +
+            "update workowners " +
+               "set workerid = " + workerID + ", " +
                    "takentime = " + lockTime + " " +
-             "where ownerid = " + assignedOwnerID + " " +
+             "where workownerid = " + assignedOwnerID + " " +
                "and (takentime is NULL or (" + now + " - takenTime > " + lockExpirationMS + ") )"
         )
 
@@ -138,14 +138,14 @@ DataAccessObject.prototype.captureLock = function(consumerID, assignedOwnerID, l
 };
 
 /**
- * Records an activity log for the given workitem (identified by the modtime and ownerid) for the worker
+ * Records an activity log for the given workitem (identified by the modtime and workownerid) for the worker
  * which processed it.
  * @param workerid
- * @param ownerid
+ * @param workownerid
  * @param modtime
  * @returns {promise|Q.promise}
  */
-DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime) {
+DataAccessObject.prototype.insertActivity = function(workerid, workownerid, modtime) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -156,8 +156,8 @@ DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime)
 
         // make the query
         dbClient.query(
-            "insert into activitylog (workerid, ownerid, modtime) " +
-                "values (" + workerid + ", " + ownerid + ", " + modtime + ")"
+            "insert into worklog (workerid, workownerid, modtime) " +
+                "values (" + workerid + ", " + workownerid + ", " + modtime + ")"
         )
 
         // evaluate the results of inserting the activity log
@@ -201,12 +201,12 @@ DataAccessObject.prototype.insertActivity = function(workerid, ownerid, modtime)
 };
 
 /**
- * Releases the lock table for the given owner and worker.
- * @param ownerID
- * @param consumerID
+ * Releases the lock table for the given workowner and worker.
+ * @param workOwnerID
+ * @param workerID
  * @returns {promise|Q.promise}
  */
-DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
+DataAccessObject.prototype.releaseLock = function(workOwnerID, workerID) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -217,11 +217,11 @@ DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
 
         // make the query
         dbClient.query(
-            "update owners " +
+            "update workowners " +
                "set workerid = NULL, " +
                     "takentime = NULL " +
-             "where ownerid = " + ownerID + " " +
-               "and workerid = " + consumerID
+             "where workownerid = " + workOwnerID + " " +
+               "and workerid = " + workerID
         )
 
         // evaluate the result of the attempt to release the lock
@@ -231,7 +231,7 @@ DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
                 var r = dbClient.results();
 
                 if (r.rowCount < 1 ) {
-                    jive.logger.warn("workerid " + consumerID + " and ownerID " + ownerID + " was already unlocked.");
+                    jive.logger.warn("workerid " + workerID + " and workOwnerID " + workOwnerID + " was already unlocked.");
                 }
                 deferred.resolve(true);
             },
@@ -256,14 +256,14 @@ DataAccessObject.prototype.releaseLock = function(ownerID, consumerID) {
 };
 
 /**
- * Renews the lock lease to the given worker and its target owner, and updates
- * the owner's record of the most recently processed work entry's modtime.
- * @param ownerID
- * @param consumerID
+ * Renews the lock lease to the given worker and its target workowner, and updates
+ * the workowner's record of the most recently processed work entry's modtime.
+ * @param workOwnerID
+ * @param workerID
  * @param modificationTime
  * @returns {promise|Q.promise}
  */
-DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificationTime) {
+DataAccessObject.prototype.updateLock = function(workOwnerID, workerID, modificationTime) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -276,11 +276,11 @@ DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificati
 
         // make the query
         dbClient.query(
-            "update owners " +
+            "update workowners " +
                "set modtime = " + modificationTime + ", " +
                    "takentime = " + now + " " +
-             "where ownerid = " + ownerID + " " +
-               "and workerid = " + consumerID
+             "where workownerid = " + workOwnerID + " " +
+               "and workerid = " + workerID
         )
 
         // evaluate the result of the attempt to update modification time
@@ -290,7 +290,7 @@ DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificati
                 var r = dbClient.results();
 
                 if (r.rowCount < 1 ) {
-                    jive.logger.warn("!!!! ownerID " + ownerID + " failed to have its modtime updated !!!!");
+                    jive.logger.warn("!!!! workOwnerID " + workOwnerID + " failed to have its modtime updated !!!!");
                 }
                 deferred.resolve(true);
             },
@@ -315,14 +315,14 @@ DataAccessObject.prototype.updateLock = function(ownerID, consumerID, modificati
 };
 
 /**
- * Adds a new work item for the given owner. The modificationTime is essentially the unique identifier of the
+ * Adds a new work item for the given workowner. The modificationTime is essentially the unique identifier of the
  * work item.
- * @param ownerID
+ * @param workOwnerID
  * @param payload
  * @param modificationTime
  * @returns {promise|Q.promise}
  */
-DataAccessObject.prototype.addWork = function(ownerID, payload, modificationTime) {
+DataAccessObject.prototype.addWork = function(workOwnerID, payload, modificationTime) {
     var deferred = q.defer();
     var db = jive.service.persistence();
 
@@ -333,7 +333,7 @@ DataAccessObject.prototype.addWork = function(ownerID, payload, modificationTime
 
         // make the query
         dbClient.query(
-            "insert into workqueue values (" + ownerID + ", '" + payload + "', " + modificationTime + ") "
+            "insert into workitems values (" + workOwnerID + ", '" + payload + "', " + modificationTime + ") "
         )
 
         // return; no results
@@ -366,18 +366,18 @@ DataAccessObject.prototype.setupSchema = function() {
         }
 
         return dbClient
-        // create workqueue
+        // create workitems
         .query(
-            'create table if not exists workqueue ' +
-                '(ownerid bigint, ' +
+            'create table if not exists workitems ' +
+                '(workownerid bigint, ' +
                 'payload text, ' +
                 'modtime bigint)'
         )
 
-        // create activitylog
+        // create worklog
         .then( function() {
-            return dbClient.query( 'create table if not exists activitylog ' +
-                '(ownerid bigint, ' +
+            return dbClient.query( 'create table if not exists worklog ' +
+                '(workownerid bigint, ' +
                 'workerid bigint, ' +
                 'modtime bigint)');
         })
@@ -385,17 +385,17 @@ DataAccessObject.prototype.setupSchema = function() {
         // create lock table
         .then( function() {
             return dbClient.query(
-                'create table if not exists owners ' +
-                    '(ownerid bigint, ' +
+                'create table if not exists workowners ' +
+                    '(workownerid bigint, ' +
                     'workerid bigint, ' +
                     'takentime bigint, ' +
                     'modtime ' +
                     'bigint)');
         })
 
-        // insert owners if necessary
+        // insert workowners if necessary
         .then( function() {
-            return dbClient.query('select count(*) from owners').then( function() {
+            return dbClient.query('select count(*) from workowners').then( function() {
                 var r = dbClient.results();
                 var count = parseInt(r.rows[0]["count"]);
                 return q.resolve(count < 1)
@@ -404,7 +404,7 @@ DataAccessObject.prototype.setupSchema = function() {
                 if ( insert ) {
                     var insertPromises = [];
                     for ( var i = 1; i <= 5; i++ ) {
-                        var insertPromise = dbClient.query("insert into owners values (" + i + ", NULL, NULL, 0)");
+                        var insertPromise = dbClient.query("insert into workowners values (" + i + ", NULL, NULL, 0)");
                         insertPromises.push(insertPromise);
                     }
                     return q.all( insertPromises );

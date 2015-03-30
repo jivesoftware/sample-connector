@@ -22,47 +22,47 @@ var DataAccessObject = require('./dao');
 // Public API
 
 /**
- * This entity consumes items from the workqueue table.
+ * This entity consumes items from the workitems table.
  * @constructor
  */
-function Consumer(consumerID) {
-    if ( !consumerID ) {
-        consumerID = process.env.__CONSUMER_ID;
-        if ( !consumerID ) {
-            consumerID = new Date().getTime();
+function Worker(workerID) {
+    if ( !workerID ) {
+        workerID = process.env.__WORKER_ID;
+        if ( !workerID ) {
+            workerID = new Date().getTime();
         }
     }
 
     jive.logger.info("******************************");
-    jive.logger.info("* consumer ", consumerID);
+    jive.logger.info("* worker ", workerID);
     jive.logger.info("******************************");
 
-    this.consumerID = consumerID;
+    this.workerID = workerID;
     this.dao = new DataAccessObject();
 }
 
-module.exports = Consumer;
+module.exports = Worker;
 
-Consumer.prototype.launch = function() {
+Worker.prototype.launch = function() {
     var self = this;
 
     // schedule
-    var consumer_lock_rate = process.env._CONSUMER_LOCK_RATE || 1000;
-    self.workItemDuration = process.env._CONSUMER_WORK_ITEM_DURATION;
+    var worker_lock_rate = process.env._WORKER_LOCK_RATE || 1000;
+    self.workItemDuration = process.env._WORKER_WORK_ITEM_DURATION;
     var id = jive.util.guid();
 
     var task = jive.tasks.build(
         function() {
             return captureLock.call( self );
         },
-        consumer_lock_rate, id);
+        worker_lock_rate, id);
     jive.tasks.schedule( task, jive.service.scheduler());
 };
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Private
 
-function performWorkItem(consumerID, ownerID, workItem) {
+function performWorkItem(workerID, workOwnerID, workItem) {
     var self = this;
     var deferred = q.defer();
     var workItemDuration = self.workItemDuration || 500 + getRandomInt(0, 300);
@@ -75,21 +75,21 @@ function performWorkItem(consumerID, ownerID, workItem) {
     // ... fire this when the work is done.
     // update the modification time for the locked resource
     .then( function() {
-        return self.dao.updateLock(ownerID, consumerID, workItem['modtime'])
+        return self.dao.updateLock(workOwnerID, workerID, workItem['modtime'])
     })
 
     // log the activity, so we can make sure that no single work entry
-    // was handled by the same consumer (eg. processed twice)
+    // was handled by the same worker (eg. processed twice)
     .then( function() {
-        return self.dao.insertActivity(consumerID, ownerID, workItem['modtime'])
+        return self.dao.insertActivity(workerID, workOwnerID, workItem['modtime'])
     })
 
     // log the activity in console
     .then( function() {
-            jive.logger.debug(">> consumer " + consumerID
+            jive.logger.debug(">> worker " + workerID
                 + " processed payload id/modtime " + workItem['modtime']
                 + " with payload " + workItem['payload']
-                + " for ownerID " + ownerID
+                + " for workOwnerID " + workOwnerID
             );
 
     }).catch( function(e) {
@@ -106,22 +106,22 @@ function performWorkItem(consumerID, ownerID, workItem) {
 /**
  * Fetches work items whose modification date is after the most recently processed
  * work item modification date that is stored in the lock table row for the specified user.
- * @param ownerID
+ * @param workOwnerID
  * @returns {promise|Q.promise}
  */
-function processLock(ownerID) {
+function processLock(workOwnerID) {
     var self = this;
     var deferred = q.defer();
 
     function createPromise(workItem) {
         return function() {
-            return performWorkItem.call(self, self.consumerID, ownerID, workItem);
+            return performWorkItem.call(self, self.workerID, workOwnerID, workItem);
         }
     }
 
     self.dao
         // fetch processable work items
-        .fetchUnprocessedItems(ownerID )
+        .fetchUnprocessedItems(workOwnerID )
 
         // process the fetched work items
         .then( function(items) {
@@ -152,11 +152,12 @@ function processLock(ownerID) {
 }
 
 /**
- * Captures a lock on the work queue items for one of the owners.
+ * Captures a lock on the work items for one of the work owners.
  */
 function captureLock() {
     var self = this;
 
+    // Random here in this example. Choosing a workOwnerID should be smarter than this
     var assignedOwnerID = getRandomInt(1, 5);
     if ( !assignedOwnerID ) {
         throw new Error("Not assigned an owner!");
@@ -164,31 +165,31 @@ function captureLock() {
 
     var now = new Date().getTime();
     return self.dao
-        .captureLock(self.consumerID, assignedOwnerID, now )
+        .captureLock(self.workerID, assignedOwnerID, now )
         .then(
         // success
         function(captured) {
             if (captured) {
-                jive.logger.info("consumer " + self.consumerID + " locked ownerID " + assignedOwnerID);
+                jive.logger.info("worker " + self.workerID + " locked workOwnerID " + assignedOwnerID);
                 processLock.call(self, assignedOwnerID).then( function() {
                     releaseLock.call(self, assignedOwnerID);
                 });
             } else {
-                jive.logger.info("consumer " + self.consumerID +
-                    " failed to lock ownerID " + assignedOwnerID);
+                jive.logger.info("worker " + self.workerID +
+                    " failed to lock workOwnerID " + assignedOwnerID);
             }
         },
 
         // failure
         function(e) {
-            jive.logger.error("exception caused consumer " + self.consumerID +
-                " failed to lock ownerID " + assignedOwnerID, e.stack);
+            jive.logger.error("exception caused worker " + self.workerID +
+                " failed to lock workOwnerID " + assignedOwnerID, e.stack);
         }
     );
 }
 
 /**
- * Releases the workqueue lock for the specified owner, and sets the last modification time as specified.
+ * Releases the work item lock for the specified work owner, and sets the last modification time as specified.
  * @param assignedOwnerID
  * @returns {promise|Q.promise}
  */
@@ -197,24 +198,24 @@ function releaseLock(assignedOwnerID) {
     var deferred = q.defer();
 
     self.dao
-        .releaseLock(assignedOwnerID, self.consumerID)
+        .releaseLock(assignedOwnerID, self.workerID)
         .then(
         // success
         function(released) {
             if (released) {
-                jive.logger.info("consumer " + self.consumerID +
-                    " unlocked ownerID " + assignedOwnerID);
+                jive.logger.info("worker " + self.workerID +
+                    " unlocked workOwnerID " + assignedOwnerID);
             } else {
-                jive.logger.error("consumer " + self.consumerID +
-                    " failed to unlock ownerID " + assignedOwnerID);
+                jive.logger.error("worker " + self.workerID +
+                    " failed to unlock workOwnerID " + assignedOwnerID);
             }
             deferred.resolve();
         },
 
         // failure
         function(e) {
-            jive.logger.error("exception consumer " + self.consumerID +
-                " failed to unlock ownerID " + assignedOwnerID, e.stack);
+            jive.logger.error("exception worker " + self.workerID +
+                " failed to unlock workOwnerID " + assignedOwnerID, e.stack);
             deferred.reject(e);
         }
     );
