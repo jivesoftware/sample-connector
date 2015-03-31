@@ -165,9 +165,6 @@ DataAccessObject.prototype.insertActivity = function(workerid, workownerid, modt
             // success
             function() {
                 var r = dbClient.results();
-                if ( !r ) {
-                    console.log();
-                }
                 deferred.resolve(r.rowCount > 0);
             },
 
