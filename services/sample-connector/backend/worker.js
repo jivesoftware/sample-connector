@@ -165,15 +165,21 @@ function captureLock() {
 
     var now = new Date().getTime();
     return self.dao
-        .captureLock(self.workerID, assignedOwnerID, now )
+        .captureLock(self.workerID, assignedOwnerID, now)
         .then(
         // success
         function(captured) {
             if (captured) {
                 jive.logger.info("worker " + self.workerID + " locked workOwnerID " + assignedOwnerID);
-                processLock.call(self, assignedOwnerID).then( function() {
-                    releaseLock.call(self, assignedOwnerID);
-                });
+                processLock.call(self, assignedOwnerID).then(
+                    function() {
+                        releaseLock.call(self, assignedOwnerID);
+                    },
+                    function(e) {
+                        // try to release lock anyway, on fail
+                        releaseLock.call(self, assignedOwnerID);
+                    }
+                );
             } else {
                 jive.logger.info("worker " + self.workerID +
                     " failed to lock workOwnerID " + assignedOwnerID);

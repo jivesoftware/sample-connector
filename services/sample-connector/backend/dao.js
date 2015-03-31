@@ -74,6 +74,11 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(workOwnerID) {
             }
         });
 
+    })
+    // failed to get a db connection
+    .fail( function(e) {
+        jive.logger.error(e.stack);
+        deferred.reject(e);
     });
 
     return deferred.promise;
@@ -132,6 +137,11 @@ DataAccessObject.prototype.captureLock = function(workerID, assignedOwnerID, loc
                 dbClient.release();
             }
         });
+    })
+    // failed to get a db connection
+    .fail( function(e) {
+        jive.logger.error(e.stack);
+        deferred.reject(e);
     });
 
     return deferred.promise;
@@ -190,8 +200,15 @@ DataAccessObject.prototype.insertActivity = function(workerid, workownerid, modt
                 dbClient.release();
             }
         });
-    }).catch( function(e) {
+    })
+
+    .catch( function(e) {
         throw e;
+    })
+    // failed to get a db connection
+    .fail( function(e) {
+        jive.logger.error(e.stack);
+        deferred.reject(e);
     });
 
     return deferred.promise;
@@ -247,6 +264,11 @@ DataAccessObject.prototype.releaseLock = function(workOwnerID, workerID) {
                 dbClient.release();
             }
         });
+    })
+    // failed to get a db client
+    .fail( function(e) {
+        jive.logger.error(e.stack);
+        deferred.reject(e);
     });
 
     return deferred.promise;
@@ -306,8 +328,12 @@ DataAccessObject.prototype.updateLock = function(workOwnerID, workerID, modifica
                 dbClient.release();
             }
         });
+    })
+    // failed to get a db connection
+    .fail( function(e) {
+        jive.logger.error(e.stack);
+        deferred.reject(e);
     });
-
     return deferred.promise;
 };
 
@@ -345,6 +371,11 @@ DataAccessObject.prototype.addWork = function(workOwnerID, payload, modification
                 dbClient.release();
             }
         });
+    })
+    // failed to get a db connection
+    .fail( function(e) {
+        jive.logger.error(e.stack);
+        deferred.reject(e);
     });
 
     return deferred.promise;
@@ -418,8 +449,10 @@ DataAccessObject.prototype.setupSchema = function() {
                 dbClient.release();
             }
         });
+    })
+    .fail( function(e) {
+        throwError(e);
     });
-
 };
 
 function throwError(detail) {
