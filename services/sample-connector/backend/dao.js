@@ -44,9 +44,11 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(workOwnerID) {
         .query(
             "select workitems.modtime, payload " +
               "from workitems join workowners on (workitems.workownerid = workowners.workownerid) " +
-             "where workitems.workownerid = " + workOwnerID + " " +
+             "where workitems.workownerid = $1 " +
                "and workitems.modtime > workowners.modtime " +
-             "order by workitems.modtime"
+             "order by workitems.modtime",
+
+             [workOwnerID]
         )
 
         // process the fetched work items
@@ -108,10 +110,11 @@ DataAccessObject.prototype.captureLock = function(workerID, assignedOwnerID, loc
         var now = new Date().getTime();
         dbClient.query(
             "update workowners " +
-               "set workerid = " + workerID + ", " +
-                   "takentime = " + lockTime + " " +
-             "where workownerid = " + assignedOwnerID + " " +
-               "and (takentime is NULL or (" + now + " - takenTime > " + lockExpirationMS + ") )"
+               "set workerid = $1, " +
+                   "takentime = $2 " +
+             "where workownerid = $3 " +
+               "and (takentime is NULL or ($4 - takenTime > $5 ) )",
+            [workerID, lockTime, assignedOwnerID, now, lockExpirationMS ]
         )
 
         // evaluate the result of the attempted lock
@@ -167,7 +170,9 @@ DataAccessObject.prototype.insertActivity = function(workerid, workownerid, modt
         // make the query
         dbClient.query(
             "insert into worklog (workerid, workownerid, modtime) " +
-                "values (" + workerid + ", " + workownerid + ", " + modtime + ")"
+            "values ($1, $2, $3)",
+
+            [workerid, workownerid, modtime]
         )
 
         // evaluate the results of inserting the activity log
@@ -234,8 +239,10 @@ DataAccessObject.prototype.releaseLock = function(workOwnerID, workerID) {
             "update workowners " +
                "set workerid = NULL, " +
                     "takentime = NULL " +
-             "where workownerid = " + workOwnerID + " " +
-               "and workerid = " + workerID
+             "where workownerid = $1 " +
+               "and workerid = $2",
+
+            [workOwnerID, workerID]
         )
 
         // evaluate the result of the attempt to release the lock
@@ -296,10 +303,12 @@ DataAccessObject.prototype.updateLock = function(workOwnerID, workerID, modifica
         // make the query
         dbClient.query(
             "update workowners " +
-               "set modtime = " + modificationTime + ", " +
-                   "takentime = " + now + " " +
-             "where workownerid = " + workOwnerID + " " +
-               "and workerid = " + workerID
+               "set modtime = $1, " +
+                   "takentime = $2 " +
+             "where workownerid = $3 " +
+               "and workerid = $4",
+
+            [modificationTime, now, workOwnerID, workerID]
         )
 
         // evaluate the result of the attempt to update modification time
@@ -356,7 +365,8 @@ DataAccessObject.prototype.addWork = function(workOwnerID, payload, modification
 
         // make the query
         dbClient.query(
-            "insert into workitems values (" + workOwnerID + ", '" + payload + "', " + modificationTime + ") "
+            "insert into workitems values ($1, $2, $3)",
+            [workOwnerID, payload, modificationTime]
         )
 
         // return; no results
