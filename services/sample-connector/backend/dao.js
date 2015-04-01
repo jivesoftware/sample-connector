@@ -17,9 +17,13 @@
 
 var jive = require('jive-sdk');
 var q = require('q');
+var BaseDAO = require('./BaseDAO');
+var util = require("util");
 
-function DataAccessObject() {
-}
+var DataAccessObject = function() {
+};
+
+util.inherits(DataAccessObject, BaseDAO);
 
 module.exports = DataAccessObject;
 
@@ -31,59 +35,36 @@ module.exports = DataAccessObject;
  * @returns {promise|Q.promise}
  */
 DataAccessObject.prototype.fetchUnprocessedItems = function(workOwnerID) {
-    var deferred = q.defer();
-    var db = jive.service.persistence();
-
-    db.getQueryClient().then( function(dbClient) {
-        if ( !dbClient ) {
-            throwError("Can't query, invalid client");
-        }
+    return this.query( function(dbClient) {
 
         // make the query
-        dbClient
-        .query(
-            "select workitems.modtime, payload " +
-              "from workitems join workowners on (workitems.workownerid = workowners.workownerid) " +
-             "where workitems.workownerid = $1 " +
-               "and workitems.modtime > workowners.modtime " +
-             "order by workitems.modtime",
+        return dbClient
+            .query(
+                "select workitems.modtime, payload " +
+                    "from workitems join workowners on (workitems.workownerid = workowners.workownerid) " +
+                    "where workitems.workownerid = $1 " +
+                    "and workitems.modtime > workowners.modtime " +
+                    "order by workitems.modtime",
 
-             [workOwnerID]
-        )
+                [workOwnerID]
+            )
 
-        // process the fetched work items
-        .then( function() {
-            var r = dbClient.results();
-            var workItems = [];
-            if (r.rows.length > 0) {
-                for ( var i = 0; i < r.rows.length; i++ ) {
-                    var workItem = {
-                        modtime : parseInt(r.rows[i]['modtime']),
-                        payload : r.rows[i]['payload']
-                    };
-                    workItems.push(workItem);
+            // process the fetched work items
+            .then( function() {
+                var r = dbClient.results();
+                var workItems = [];
+                if (r.rows.length > 0) {
+                    for ( var i = 0; i < r.rows.length; i++ ) {
+                        var workItem = {
+                            modtime : parseInt(r.rows[i]['modtime']),
+                            payload : r.rows[i]['payload']
+                        };
+                        workItems.push(workItem);
+                    }
                 }
-            }
-
-            return deferred.resolve(workItems);
-        })
-
-        // always try to release the client, if it exists
-        .finally(function() {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        });
-
-    })
-    // failed to get a db connection
-    .fail( function(e) {
-        jive.logger.error(e.stack);
-        deferred.reject(e);
+                return q.resolve(workItems);
+            });
     });
-
-    return deferred.promise;
 };
 
 /**
@@ -96,58 +77,37 @@ DataAccessObject.prototype.fetchUnprocessedItems = function(workOwnerID) {
  * @returns {promise|Q.promise}
  */
 DataAccessObject.prototype.captureLock = function(workerID, assignedOwnerID, lockTime, lockExpirationMS) {
-    var deferred = q.defer();
-    var db = jive.service.persistence();
-
     lockExpirationMS = lockExpirationMS || 60 * 1000;
 
-    db.getQueryClient().then( function(dbClient) {
-        if ( !dbClient ) {
-            throwError("Can't query, invalid client");
-        }
+    return this.query( function(dbClient) {
 
         // make the query
         var now = new Date().getTime();
-        dbClient.query(
-            "update workowners " +
-               "set workerid = $1, " +
-                   "takentime = $2 " +
-             "where workownerid = $3 " +
-               "and (takentime is NULL or ($4 - takenTime > $5 ) )",
-            [workerID, lockTime, assignedOwnerID, now, lockExpirationMS ]
-        )
+        return dbClient.query(
+                "update workowners " +
+                    "set workerid = $1, " +
+                    "takentime = $2 " +
+                    "where workownerid = $3 " +
+                    "and (takentime is NULL or ($4 - takenTime > $5 ) )",
+                [workerID, lockTime, assignedOwnerID, now, lockExpirationMS ]
+            )
 
-        // evaluate the result of the attempted lock
-        .then(
-            // success
-            function() {
-                var r = dbClient.results();
-                deferred.resolve(r.rowCount > 0);
-            },
+            // evaluate the result of the attempted lock
+            .then(
+                // success
+                function() {
+                    var r = dbClient.results();
+                    return q.resolve(r.rowCount > 0);
+                },
 
-            // failure
-            function(e) {
-                // log at debug, because update-based lock failures are legit
-                jive.logger.debug(e.stack);
-                deferred.resolve(false);
-            }
-        )
-
-        // always try to release the client, if it exists
-        .finally(function() {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        });
-    })
-    // failed to get a db connection
-    .fail( function(e) {
-        jive.logger.error(e.stack);
-        deferred.reject(e);
+                // failure
+                function(e) {
+                    // log at debug, because update-based lock failures are legit
+                    jive.logger.debug(e.stack);
+                    return q.resolve(false);
+                }
+            )
     });
-
-    return deferred.promise;
 };
 
 /**
@@ -159,64 +119,31 @@ DataAccessObject.prototype.captureLock = function(workerID, assignedOwnerID, loc
  * @returns {promise|Q.promise}
  */
 DataAccessObject.prototype.insertActivity = function(workerid, workownerid, modtime) {
-    var deferred = q.defer();
-    var db = jive.service.persistence();
-
-    db.getQueryClient().then( function(dbClient) {
-        if ( !dbClient ) {
-            throwError("Can't query, invalid client");
-        }
+    return this.query( function(dbClient) {
 
         // make the query
-        dbClient.query(
-            "insert into worklog (workerid, workownerid, modtime) " +
-            "values ($1, $2, $3)",
+       return dbClient.query(
+                "insert into worklog (workerid, workownerid, modtime) " +
+                    "values ($1, $2, $3)",
 
-            [workerid, workownerid, modtime]
-        )
+                [workerid, workownerid, modtime]
+            )
 
-        // evaluate the results of inserting the activity log
-        .then(
-            // success
-            function() {
-                var r = dbClient.results();
-                deferred.resolve(r.rowCount > 0);
-            },
+            // evaluate the results of inserting the activity log
+            .then(
+                // success
+                function() {
+                    var r = dbClient.results();
+                    return q.resolve(r.rowCount > 0);
+                },
 
-            // failure
-            function(e) {
-                jive.logger.debug(e.stack);
-                deferred.resolve(false);
-            }
-        )
-
-        // always try to release the client, if it exists
-        .catch(function(e) {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        })
-
-        // always try to release the client, if it exists
-        .finally(function() {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        });
-    })
-
-    .catch( function(e) {
-        throw e;
-    })
-    // failed to get a db connection
-    .fail( function(e) {
-        jive.logger.error(e.stack);
-        deferred.reject(e);
+                // failure
+                function(e) {
+                    jive.logger.debug(e.stack);
+                    return q.resolve(false);
+                }
+            )
     });
-
-    return deferred.promise;
 };
 
 /**
@@ -226,59 +153,38 @@ DataAccessObject.prototype.insertActivity = function(workerid, workownerid, modt
  * @returns {promise|Q.promise}
  */
 DataAccessObject.prototype.releaseLock = function(workOwnerID, workerID) {
-    var deferred = q.defer();
-    var db = jive.service.persistence();
-
-    db.getQueryClient().then( function(dbClient) {
-        if ( !dbClient ) {
-            throwError("Can't query, invalid client");
-        }
+    return this.query( function(dbClient) {
 
         // make the query
-        dbClient.query(
-            "update workowners " +
-               "set workerid = NULL, " +
+        return dbClient.query(
+                "update workowners " +
+                    "set workerid = NULL, " +
                     "takentime = NULL " +
-             "where workownerid = $1 " +
-               "and workerid = $2",
+                    "where workownerid = $1 " +
+                    "and workerid = $2",
 
-            [workOwnerID, workerID]
-        )
+                [workOwnerID, workerID]
+            )
 
-        // evaluate the result of the attempt to release the lock
-        .then(
-            // success
-            function() {
-                var r = dbClient.results();
+            // evaluate the result of the attempt to release the lock
+            .then(
+                // success
+                function() {
+                    var r = dbClient.results();
 
-                if (r.rowCount < 1 ) {
-                    jive.logger.warn("workerid " + workerID + " and workOwnerID " + workOwnerID + " was already unlocked.");
+                    if (r.rowCount < 1 ) {
+                        jive.logger.warn("workerid " + workerID + " and workOwnerID " + workOwnerID + " was already unlocked.");
+                    }
+                    return q.resolve(true);
+                },
+
+                // failure
+                function(e) {
+                    jive.logger.debug(e.stack);
+                    return q.resolve(false);
                 }
-                deferred.resolve(true);
-            },
-
-            // failure
-            function(e) {
-                jive.logger.debug(e.stack);
-                deferred.resolve(false);
-            }
-        )
-
-        // always try to release the client, if it exists
-        .finally(function() {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        });
-    })
-    // failed to get a db client
-    .fail( function(e) {
-        jive.logger.error(e.stack);
-        deferred.reject(e);
+            )
     });
-
-    return deferred.promise;
 };
 
 /**
@@ -290,29 +196,22 @@ DataAccessObject.prototype.releaseLock = function(workOwnerID, workerID) {
  * @returns {promise|Q.promise}
  */
 DataAccessObject.prototype.updateLock = function(workOwnerID, workerID, modificationTime) {
-    var deferred = q.defer();
-    var db = jive.service.persistence();
+    return this.query( function(dbClient) {
+       var now = new Date().getTime();
 
-    db.getQueryClient().then( function(dbClient) {
-        if ( !dbClient ) {
-            throwError("Can't query, invalid client");
-        }
+       // make the query
+       return dbClient.query(
+                "update workowners " +
+                    "set modtime = $1, " +
+                    "takentime = $2 " +
+                    "where workownerid = $3 " +
+                    "and workerid = $4",
 
-        var now = new Date().getTime();
+                [modificationTime, now, workOwnerID, workerID]
+            )
 
-        // make the query
-        dbClient.query(
-            "update workowners " +
-               "set modtime = $1, " +
-                   "takentime = $2 " +
-             "where workownerid = $3 " +
-               "and workerid = $4",
-
-            [modificationTime, now, workOwnerID, workerID]
-        )
-
-        // evaluate the result of the attempt to update modification time
-        .then(
+            // evaluate the result of the attempt to update modification time
+            .then(
             // success
             function() {
                 var r = dbClient.results();
@@ -320,30 +219,16 @@ DataAccessObject.prototype.updateLock = function(workOwnerID, workerID, modifica
                 if (r.rowCount < 1 ) {
                     jive.logger.warn("!!!! workOwnerID " + workOwnerID + " failed to have its modtime updated !!!!");
                 }
-                deferred.resolve(true);
+                return q.resolve(true);
             },
 
             // failure
             function(e) {
                 jive.logger.debug(e.stack);
-                deferred.resolve(false);
+                return q.resolve(false);
             }
         )
-
-        // always try to release the client, if it exists
-        .finally(function() {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        });
-    })
-    // failed to get a db connection
-    .fail( function(e) {
-        jive.logger.error(e.stack);
-        deferred.reject(e);
     });
-    return deferred.promise;
 };
 
 /**
@@ -355,40 +240,18 @@ DataAccessObject.prototype.updateLock = function(workOwnerID, workerID, modifica
  * @returns {promise|Q.promise}
  */
 DataAccessObject.prototype.addWork = function(workOwnerID, payload, modificationTime) {
-    var deferred = q.defer();
-    var db = jive.service.persistence();
-
-    db.getQueryClient().then( function(dbClient) {
-        if ( !dbClient ) {
-            throwError("Can't query, invalid client");
-        }
-
+    return this.query( function(dbClient) {
         // make the query
-        dbClient.query(
+        return dbClient.query(
             "insert into workitems values ($1, $2, $3)",
             [workOwnerID, payload, modificationTime]
         )
 
         // return; no results
         .then(function () {
-            deferred.resolve();
+            return q.resolve();
         })
-
-        // always try to release the client, if it exists
-        .finally(function() {
-            if ( dbClient ) {
-                // always try to release the client, if it exists
-                dbClient.release();
-            }
-        });
-    })
-    // failed to get a db connection
-    .fail( function(e) {
-        jive.logger.error(e.stack);
-        deferred.reject(e);
     });
-
-    return deferred.promise;
 };
 
 /**
