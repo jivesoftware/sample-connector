@@ -260,6 +260,7 @@ DataAccessObject.prototype.addWork = function(workOwnerID, payload, modification
  */
 DataAccessObject.prototype.setupSchema = function() {
     var db = jive.service.persistence();
+    var self = this;
 
     return db.getQueryClient().then( function(dbClient) {
         if ( !dbClient ) {
@@ -324,12 +325,6 @@ DataAccessObject.prototype.setupSchema = function() {
         });
     })
     .fail( function(e) {
-        throwError(e);
+        self.throwError(e);
     });
 };
-
-function throwError(detail) {
-    var error = new Error(detail);
-    jive.logger.error(error.stack);
-    throw error;
-}

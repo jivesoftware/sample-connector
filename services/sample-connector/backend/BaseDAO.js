@@ -66,8 +66,10 @@ DataAccessObject.prototype.query = function(operation) {
     });
 };
 
+DataAccessObject.prototype.throwError = throwError;
+
 function throwError(detail) {
-    var error = new Error(detail);
+    var error = typeof detail === 'string' ? new Error(detail) : detail;
     jive.logger.error(error.stack);
     throw error;
 }
