@@ -28,18 +28,22 @@ module.exports = DataAccessObject;
  * 1. acquire a client - throw an error if non can be found
  * 2. run the operation (the parameter to this function)
  * 3. release the client
- * @param operation
+ * @param operation MUST be a promise!
  * @returns {*}
  */
 DataAccessObject.prototype.query = function(operation) {
     var db = jive.service.persistence();
+
+    // fetch a db connection from the pool
     var pClient = db.getQueryClient();
 
     return pClient.then( function(dbClient) {
+        // die if one comes back empty
         if ( !dbClient ) {
             throwError("Can't query, invalid client");
         }
 
+        // die if the operation doesn't return a promise
         var result = operation(dbClient);
         if ( !result ) {
             throwError("Operation must return a promise.");
