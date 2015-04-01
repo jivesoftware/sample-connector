@@ -28,10 +28,7 @@ exports.onBootstrap = function(app) {
     var error;
 
     // setup the schema
-    (function() {
-        var dao = new DataAccessObject();
-        return dao.setupSchema();
-    })()
+    return new DataAccessObject().setupSchema()
 
     // launch the workers
     .then( function() {
