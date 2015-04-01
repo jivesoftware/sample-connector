@@ -28,7 +28,7 @@ module.exports = DataAccessObject;
  * 1. acquire a client - throw an error if non can be found
  * 2. run the operation (the parameter to this function)
  * 3. release the client
- * @param operation MUST be a promise!
+ * @param operation a function that MUST return a promise!
  * @returns {*}
  */
 DataAccessObject.prototype.query = function(operation) {
