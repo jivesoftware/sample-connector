@@ -5,5 +5,5 @@
     "development" : true,
     "logLevel"  : "DEBUG",
     "persistence" : "jive-persistence-postgres",
-    "databaseUrl" : "pg://postgres:postgres@localhost:5432/sample-connector"
+    "databaseUrl" : "pg://{{{RDS_USERNAME}}}:{{{RDS_PASSWORD}}}@{{{RDS_HOSTNAME}}}:{{{RDS_PORT}}}/{{{RDS_DB_NAME}}}"
 }
