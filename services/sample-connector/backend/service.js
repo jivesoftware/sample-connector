@@ -28,31 +28,30 @@ exports.onBootstrap = function(app) {
     var error;
 
     // setup the schema
-    (function() {
-        var dao = new DataAccessObject();
-        return dao.setupSchema();
-    })()
+    return new DataAccessObject().setupSchema()
 
     // launch the workers
     .then( function() {
         var role = process.env.__ROLE;
 
-        if ( role === 'producer' ) {
+        if ( role === 'producer' || role == 'all' ) {
             var producer = new Producer();
             producer.launch();
         }
 
-        if ( role === 'worker' ) {
-            var worker = new Worker();
-            worker.launch();
+        if ( role === 'worker' || role == 'all' ) {
+            var numWorkers = process.env.__NUM_WORKERS || 1;
+            for ( var i = 0; i < numWorkers; i++ ) {
+                var worker = new Worker();
+                worker.launch();
+            }
         }
     })
     .catch(function(e) {
-        error = e;
-    })
-    .done(function() {
-        if ( error ) {
-            throw error;
-        }
+        // fail w/ an error, so it can be thrown by the downstream fail handler
+        // note - for some reason a throw here doesn't actually do anything
+        return q.reject(e);
+    }).fail(function(r) {
+        throw r;
     });
 };

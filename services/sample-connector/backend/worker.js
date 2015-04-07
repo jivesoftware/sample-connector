@@ -171,18 +171,17 @@ function captureLock() {
         function(captured) {
             if (captured) {
                 jive.logger.info("worker " + self.workerID + " locked workOwnerID " + assignedOwnerID);
-                processLock.call(self, assignedOwnerID).then(
-                    function() {
-                        releaseLock.call(self, assignedOwnerID);
-                    },
+                return processLock.call(self, assignedOwnerID).finally(
                     function(e) {
                         // try to release lock anyway, on fail
-                        releaseLock.call(self, assignedOwnerID);
+                        return releaseLock.call(self, assignedOwnerID);
                     }
                 );
             } else {
-                jive.logger.info("worker " + self.workerID +
-                    " failed to lock workOwnerID " + assignedOwnerID);
+                var message = "worker " + self.workerID +
+                    " failed to lock workOwnerID " + assignedOwnerID;
+                jive.logger.info(message);
+                return q.resolve(message);
             }
         },
 
@@ -190,8 +189,11 @@ function captureLock() {
         function(e) {
             jive.logger.error("exception caused worker " + self.workerID +
                 " failed to lock workOwnerID " + assignedOwnerID, e.stack);
+            return q.reject(e);
         }
-    );
+    ).catch( function() {
+        return q.resolve();
+    });
 }
 
 /**
