@@ -2,9 +2,9 @@ branch-defaults:
   master:
     environment: RaminSampleConnector
 global:
-  application_name: Ramin EB App
+  application_name: sample-connector
   default_ec2_keyname: Ramin_Beanstalk
   default_platform: Node.js
   default_region: us-east-1
-  profile: null
+  profile: eb-cli
   sc: git
