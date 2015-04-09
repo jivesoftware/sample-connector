@@ -1,0 +1,10 @@
+{
+    "clientUrl": "http://localhost",
+    "port": "8090",
+    "role" : "worker",
+    "monitoringInterval" :1000,
+    "development" : true,
+    "logLevel"  : "DEBUG",
+    "persistence" : "jive-persistence-postgres",
+    "databaseUrl" : "pg://postgres:postgres@localhost:5432/sample-connector"
+}

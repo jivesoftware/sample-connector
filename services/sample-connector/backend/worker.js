@@ -17,6 +17,15 @@
 var jive = require('jive-sdk');
 var q = require('q');
 var DataAccessObject = require('./dao');
+var apiServices = require('../../../test/api-services/api-services');
+
+//Set the test context when running tests in order to
+// deliver to the api data store
+var testContext = false;
+
+Worker.prototype.establishTestContext = function() {
+    testContext = true;
+};
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Public API
@@ -71,6 +80,21 @@ function performWorkItem(workerID, workOwnerID, workItem) {
     // .... pretend to do some work that takes a bit of time ....
     // ..........................................................
     pause(workItemDuration)
+
+    // ..........................................................
+    // .... If we're testing, store payload for the tests ....
+    // ..........................................................
+    .then(function () {
+            if (testContext) {
+                return apiServices.store(workItem['payload']);
+            }
+            else {
+                var defer = q.defer();
+                defer.resolve();
+                return defer.promise;
+            }
+        })
+
 
     // ... fire this when the work is done.
     // update the modification time for the locked resource
