@@ -264,7 +264,7 @@ DataAccessObject.prototype.setupSchema = function() {
 
     return db.getQueryClient().then( function(dbClient) {
         if ( !dbClient ) {
-            throwError("Can't query, invalid client");
+            self.throwError("Can't query, invalid client");
         }
 
         return dbClient
@@ -299,7 +299,13 @@ DataAccessObject.prototype.setupSchema = function() {
         .then( function() {
             return dbClient.query('select count(*) from workowners').then( function() {
                 var r = dbClient.results();
-                var count = parseInt(r.rows[0]["count"]);
+                var count = 0;
+                var resultRow = r.rows[0];
+                for ( var k in  resultRow ) {
+                    if (resultRow.hasOwnProperty(k) && k.indexOf('count') > -1 ) {
+                        count =  parseInt(resultRow[k]);
+                    }
+                }
                 return q.resolve(count < 1)
             })
             .then( function(insert) {
