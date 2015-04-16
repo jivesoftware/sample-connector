@@ -4,6 +4,6 @@
     "monitoringInterval" :1000,
     "development" : true,
     "logLevel"  : "DEBUG",
-    "persistence" : "jive-persistence-postgres",
+    "persistence" : "{{PERSISTENCE}}",
     "databaseUrl" : "pg://{{{RDS_USERNAME}}}:{{{RDS_PASSWORD}}}@{{{RDS_HOSTNAME}}}:{{{RDS_PORT}}}/{{{RDS_DB_NAME}}}"
 }
