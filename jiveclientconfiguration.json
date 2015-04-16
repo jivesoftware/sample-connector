@@ -4,6 +4,10 @@
     "monitoringInterval" :1000,
     "development" : true,
     "logLevel"  : "DEBUG",
-    "persistence" : "{{PERSISTENCE}}",
+    "persistence" : "{{{PERSISTENCE}}}",
     "databaseUrl" : "pg://{{{RDS_USERNAME}}}:{{{RDS_PASSWORD}}}@{{{RDS_HOSTNAME}}}:{{{RDS_PORT}}}/{{{RDS_DB_NAME}}}"
+    "extensionInfo" : {
+        "uuid": "{{{EXTENSION_UUID}}}",
+        "jiveServiceSignature" : "{{{JIVE_SERVICE_SIGNATURE}}}"
+    }
 }
