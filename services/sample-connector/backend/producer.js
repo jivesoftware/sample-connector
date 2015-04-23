@@ -17,6 +17,7 @@
 var jive = require('jive-sdk');
 var q = require('q');
 var DataAccessObject = require('./dao');
+var apiServices = require('../../../test/api-services/api-services');
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Public API
@@ -35,19 +36,47 @@ function Producer() {
 
 module.exports = Producer;
 
-Producer.prototype.launch = function() {
+var useTestApiService = function () {
+    return apiServices.generate(1).then(
+        //data successfully returned from api
+        function (data) {
+            var deferred = q.defer();
+            deferred.resolve(data);
+            return deferred.promise;
+        },
+
+        //error returned from api
+        function (err) {
+            jive.logger.info("ERROR:" + err);
+        })
+};
+
+var generateGuid = function () {
+    var deferred = q.defer();
+    deferred.resolve(jive.util.guid());
+    return deferred.promise;
+};
+
+Producer.prototype.launch = function () {
     var self = this;
 
     var produceWorkItem = function () {
         var workOwnerID = getRandomInt(1, 5);
-        var payload = jive.util.guid();
         var modificationTime = new Date().getTime();
 
-        self.dao.addWork(workOwnerID, payload, modificationTime).then(function() {
-            jive.logger.info("Inserted workOwnerID " + workOwnerID + ", payload " + payload);
-        });
-    };
+        //Determine if the api-service is running
+        // if running: use it to generate data
+        // if not: generate a guid
 
+        apiServices.isRunning()
+            .then(useTestApiService, generateGuid)
+            .then(function (payload) {
+                self.dao.addWork(workOwnerID, payload, modificationTime)
+                    .then(function () {
+                        jive.logger.info("Inserted workOwnerID " + workOwnerID + ", payload " + payload);
+                    });
+            });
+    };
     // schedule
     var producer_rate = process.env.__PRODUCER_RATE || 250;
     var id = jive.util.guid();

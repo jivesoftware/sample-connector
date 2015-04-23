@@ -36,4 +36,8 @@ export __ROLE=worker
 
 echo "Starting worker #$__WORKER_ID"
 sleep 1
+if [[ "$PWD" =~ 'scripts' ]]
+    then
+        cd '../';
+fi
 node app.js
